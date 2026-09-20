@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: discord-inactivity-bot
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: INACTIVITY_DAYS
+        value: 30
+      - key: CHECK_INTERVAL_HOURS
+        value: 12
+      - key: DRY_RUN
+        value: false
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: CLIENT_ID
+        sync: false
