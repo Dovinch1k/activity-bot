@@ -8,7 +8,7 @@ import { config } from './config.js';
 import { handleMessageCreate } from './events/messageCreate.js';
 import { handleVoiceStateUpdate } from './events/voiceStateUpdate.js';
 import { handleInteractionCreate, registerCommands } from './commands/index.js';
-import { checkGuildInactivity } from './services/inactivityChecker.js';
+import { checkGuildInactivity, scanGuildHistory } from './services/inactivityChecker.js';
 import { startHealthServer } from './server.js';
 import { activityRepo } from './db/repository.js';
 
@@ -44,6 +44,16 @@ client.once(Events.ClientReady, async readyClient => {
   // Регистрируем слэш-команды
   await registerCommands(client);
 
+  // Первичное сканирование истории каналов, чтобы подтянуть активность участников
+  for (const [, guild] of readyClient.guilds.cache) {
+    try {
+      activityRepo.getGuildInstalledAt(guild.id);
+      await scanGuildHistory(guild, 50);
+    } catch (err) {
+      console.error(`[Startup Scan] Ошибка при первичном сканировании ${guild.name}:`, err);
+    }
+  }
+
   // Периодическая проверка неактивности
   const intervalMs = config.checkIntervalHours * 60 * 60 * 1000;
   console.log(`🕒 Периодическая проверка настроена: каждые ${config.checkIntervalHours} ч.`);
@@ -65,6 +75,14 @@ async function runScheduledCheck(): Promise<void> {
     }
   }
 }
+
+// При добавлении бота на новый сервер:
+client.on(Events.GuildCreate, async guild => {
+  console.log(`🎉 Бот добавлен на новый сервер: ${guild.name} (${guild.id})`);
+  activityRepo.getGuildInstalledAt(guild.id);
+  await registerCommands(client);
+  await scanGuildHistory(guild, 50);
+});
 
 // Слушатели событий
 client.on(Events.MessageCreate, handleMessageCreate);

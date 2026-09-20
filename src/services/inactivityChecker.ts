@@ -1,4 +1,4 @@
-import { Guild, PermissionFlagsBits, TextChannel, EmbedBuilder } from 'discord.js';
+import { Guild, PermissionFlagsBits, TextChannel, EmbedBuilder, ChannelType } from 'discord.js';
 import { config } from '../config.js';
 import { activityRepo } from '../db/repository.js';
 
@@ -37,6 +37,7 @@ export async function checkGuildInactivity(guild: Guild, options?: { dryRun?: bo
   // Загружаем всех участников гильдии
   const members = await guild.members.fetch();
   const activities = activityRepo.getAllGuildActivities(guild.id);
+  const installedAt = activityRepo.getGuildInstalledAt(guild.id);
 
   const result: InactivityCheckResult = {
     guildId: guild.id,
@@ -93,19 +94,12 @@ export async function checkGuildInactivity(guild: Guild, options?: { dryRun?: bo
       lastActiveTimestamp = activity.last_active_at;
       lastActionType = activity.last_action_type;
     } else {
-      // Если записи в БД нет, проверяем дату вступления на сервер
+      // Если записи в БД еще нет (бот только добавлен):
+      // Точкой отсчета является дата добавления бота либо дата захода участника на сервер (что позже).
+      // Таким образом, все существующие участники получают 30 дней активности с момента добавления бота!
       const joinedAt = member.joinedTimestamp || now;
-      const timeSinceJoined = now - joinedAt;
-
-      // Если пользователь зашел на сервер менее 30 дней назад — даем льготный период
-      if (timeSinceJoined < config.inactivityMs) {
-        result.activeMembers++;
-        continue;
-      }
-
-      // Если пользователь находится на сервере > 30 дней и ни разу не писал и не заходил в войс
-      lastActiveTimestamp = joinedAt;
-      lastActionType = 'no_activity_since_join';
+      lastActiveTimestamp = Math.max(joinedAt, installedAt);
+      lastActionType = 'baseline';
     }
 
     const inactiveMs = now - lastActiveTimestamp;
@@ -151,6 +145,43 @@ export async function checkGuildInactivity(guild: Guild, options?: { dryRun?: bo
   await sendLogReport(guild, result);
 
   return result;
+}
+
+/**
+ * Сканирует последние сообщения в текстовых каналах сервера для заполнения активности
+ */
+export async function scanGuildHistory(guild: Guild, limitPerChannel: number = 100): Promise<{ channelsScanned: number; messagesFound: number; usersUpdated: number }> {
+  console.log(`[History Scanner] Сканирование истории сообщений на сервере "${guild.name}"...`);
+  const channels = await guild.channels.fetch();
+  let channelsScanned = 0;
+  let messagesFound = 0;
+  const updatedUserIds = new Set<string>();
+
+  for (const [, channel] of channels) {
+    if (!channel || channel.type !== ChannelType.GuildText || !channel.viewable) {
+      continue;
+    }
+
+    try {
+      channelsScanned++;
+      const messages = await (channel as TextChannel).messages.fetch({ limit: limitPerChannel });
+      for (const [, message] of messages) {
+        if (message.author.bot) continue;
+        messagesFound++;
+        activityRepo.recordActivityIfNewer(guild.id, message.author.id, 'message', message.createdTimestamp);
+        updatedUserIds.add(message.author.id);
+      }
+    } catch (err) {
+      console.warn(`[History Scanner] Не удалось прочитать сообщения в канале #${channel.name}:`, err);
+    }
+  }
+
+  console.log(`[History Scanner] Завершено. Просканировано каналов: ${channelsScanned}, сообщений: ${messagesFound}, обновлено участников: ${updatedUserIds.size}`);
+  return {
+    channelsScanned,
+    messagesFound,
+    usersUpdated: updatedUserIds.size,
+  };
 }
 
 /**

@@ -40,7 +40,29 @@ export class ActivityRepository {
 
       CREATE INDEX IF NOT EXISTS idx_guild_last_active 
       ON user_activity (guild_id, last_active_at);
+
+      CREATE TABLE IF NOT EXISTS guild_settings (
+        guild_id TEXT PRIMARY KEY,
+        installed_at INTEGER NOT NULL
+      );
     `);
+  }
+
+  /**
+   * Получить дату добавления бота на сервер.
+   * Если бот запущен на сервере впервые, текущая дата сохраняется как точка отсчета.
+   */
+  public getGuildInstalledAt(guildId: string): number {
+    const stmt = this.db.prepare('SELECT installed_at FROM guild_settings WHERE guild_id = ?');
+    const row = stmt.get(guildId) as { installed_at: number } | undefined;
+    if (row && row.installed_at) {
+      return row.installed_at;
+    }
+
+    const now = Date.now();
+    const insert = this.db.prepare('INSERT INTO guild_settings (guild_id, installed_at) VALUES (?, ?)');
+    insert.run(guildId, now);
+    return now;
   }
 
   /**
@@ -57,6 +79,41 @@ export class ActivityRepository {
     `);
 
     stmt.run(userId, guildId, timestamp, actionType, timestamp);
+  }
+
+  /**
+   * Записать активность, только если переданный timestamp новее уже сохраненного
+   * (полезно при сканировании истории сообщений)
+   */
+  public recordActivityIfNewer(guildId: string, userId: string, actionType: 'message' | 'voice', timestamp: number): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO user_activity (user_id, guild_id, last_active_at, last_action_type, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, guild_id) DO UPDATE SET
+        last_active_at = CASE WHEN excluded.last_active_at > user_activity.last_active_at THEN excluded.last_active_at ELSE user_activity.last_active_at END,
+        last_action_type = CASE WHEN excluded.last_active_at > user_activity.last_active_at THEN excluded.last_action_type ELSE user_activity.last_action_type END,
+        updated_at = CASE WHEN excluded.last_active_at > user_activity.last_active_at THEN excluded.updated_at ELSE user_activity.updated_at END
+    `);
+
+    stmt.run(userId, guildId, timestamp, actionType, Date.now());
+  }
+
+  /**
+   * Пометить список пользователей активными прямо сейчас
+   */
+  public markAllActive(guildId: string, userIds: string[], timestamp: number = Date.now()): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO user_activity (user_id, guild_id, last_active_at, last_action_type, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, guild_id) DO UPDATE SET
+        last_active_at = excluded.last_active_at,
+        last_action_type = excluded.last_action_type,
+        updated_at = excluded.updated_at
+    `);
+
+    for (const userId of userIds) {
+      stmt.run(userId, guildId, timestamp, 'message', timestamp);
+    }
   }
 
   /**

@@ -7,7 +7,7 @@ import {
   REST,
   Routes,
 } from 'discord.js';
-import { checkGuildInactivity } from '../services/inactivityChecker.js';
+import { checkGuildInactivity, scanGuildHistory } from '../services/inactivityChecker.js';
 import { activityRepo } from '../db/repository.js';
 import { config } from '../config.js';
 
@@ -32,6 +32,16 @@ export const slashCommands = [
         .setDescription('Участник для проверки')
         .setRequired(true)
     ),
+
+  new SlashCommandBuilder()
+    .setName('scan-history')
+    .setDescription('Просканировать историю сообщений в каналах и обновить активность')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('mark-all-active')
+    .setDescription('Сбросить таймер и пометить всех текущих участников активными от сегодняшнего дня')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ];
 
 export async function registerCommands(client: Client): Promise<void> {
@@ -72,15 +82,14 @@ export async function handleInteractionCreate(interaction: ChatInputCommandInter
     return;
   }
 
+  // 1. Команда /check-inactivity
   if (interaction.commandName === 'check-inactivity') {
-    // Проверка прав администратора
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
       await interaction.reply({ content: 'У вас нет прав администратора для запуска этой команды.', ephemeral: true });
       return;
     }
 
     const dryRun = interaction.options.getBoolean('dry_run') ?? true;
-
     await interaction.deferReply({ ephemeral: true });
 
     try {
@@ -116,8 +125,10 @@ export async function handleInteractionCreate(interaction: ChatInputCommandInter
       console.error('[Command Error]', error);
       await interaction.editReply({ content: `Произошла ошибка при выполнении: ${error instanceof Error ? error.message : String(error)}` });
     }
+    return;
   }
 
+  // 2. Команда /activity-info
   if (interaction.commandName === 'activity-info') {
     const targetUser = interaction.options.getUser('user', true);
     const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
@@ -141,6 +152,7 @@ export async function handleInteractionCreate(interaction: ChatInputCommandInter
     }
 
     const activity = activityRepo.getUserActivity(interaction.guild.id, member.id);
+    const installedAt = activityRepo.getGuildInstalledAt(interaction.guild.id);
     const now = Date.now();
     const joinedAt = member.joinedTimestamp || now;
 
@@ -151,8 +163,8 @@ export async function handleInteractionCreate(interaction: ChatInputCommandInter
       lastActiveAt = activity.last_active_at;
       actionDesc = activity.last_action_type === 'message' ? 'Отправка сообщения' : 'Вход в голосовой канал';
     } else {
-      lastActiveAt = joinedAt;
-      actionDesc = 'Нет активности (учитывается дата входа на сервер)';
+      lastActiveAt = Math.max(joinedAt, installedAt);
+      actionDesc = 'Точка отсчета: дата добавления бота на сервер';
     }
 
     const daysInactive = Math.floor((now - lastActiveAt) / (24 * 60 * 60 * 1000));
@@ -172,5 +184,46 @@ export async function handleInteractionCreate(interaction: ChatInputCommandInter
       .setThumbnail(member.user.displayAvatarURL());
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
+  }
+
+  // 3. Команда /scan-history
+  if (interaction.commandName === 'scan-history') {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      await interaction.reply({ content: 'У вас нет прав администратора для запуска этой команды.', ephemeral: true });
+      return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const scanRes = await scanGuildHistory(interaction.guild);
+      await interaction.editReply({
+        content: `🔍 **Сканирование завершено!**\nПроверено каналов: **${scanRes.channelsScanned}**\nНайдено сообщений: **${scanRes.messagesFound}**\nОбновлена активность для **${scanRes.usersUpdated}** участников.`,
+      });
+    } catch (err) {
+      await interaction.editReply({ content: `Ошибка сканирования: ${err instanceof Error ? err.message : String(err)}` });
+    }
+    return;
+  }
+
+  // 4. Команда /mark-all-active
+  if (interaction.commandName === 'mark-all-active') {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      await interaction.reply({ content: 'У вас нет прав администратора для запуска этой команды.', ephemeral: true });
+      return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const members = await interaction.guild.members.fetch();
+      const userIds = members.filter(m => !m.user.bot).map(m => m.id);
+      activityRepo.markAllActive(interaction.guild.id, userIds);
+      await interaction.editReply({
+        content: `✅ **Все участники (${userIds.length} чел.) успешно помечены активными!**\nТеперь у каждого из них есть 30 дней с сегодняшнего дня для отправки сообщений или входа в войс.`,
+      });
+    } catch (err) {
+      await interaction.editReply({ content: `Ошибка: ${err instanceof Error ? err.message : String(err)}` });
+    }
+    return;
   }
 }
