@@ -79,13 +79,7 @@ export async function checkGuildInactivity(guild: Guild, options?: { dryRun?: bo
       continue;
     }
 
-    // 5. Проверяем, может ли бот технически кикнуть этого участника (иерархия ролей)
-    if (!member.kickable) {
-      result.notKickable++;
-      continue;
-    }
-
-    // 6. Определяем время последней активности
+    // 5. Определяем время последней активности
     const activity = activities.get(member.id);
     let lastActiveTimestamp: number;
     let lastActionType: string | null = null;
@@ -105,6 +99,12 @@ export async function checkGuildInactivity(guild: Guild, options?: { dryRun?: bo
     const inactiveMs = now - lastActiveTimestamp;
 
     if (inactiveMs >= config.inactivityMs) {
+      // Проверяем, может ли бот технически кикнуть этого участника (иерархия ролей)
+      if (!member.kickable) {
+        result.notKickable++;
+        continue;
+      }
+
       const daysInactive = Math.floor(inactiveMs / (24 * 60 * 60 * 1000));
       const reason = `Неактивен ${daysInactive} дн. (нет сообщений и заходов в войс)`;
 
