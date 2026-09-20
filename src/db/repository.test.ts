@@ -43,6 +43,13 @@ test('ActivityRepository records and retrieves activity', () => {
   assert.equal(guild1Map.has('user2'), true);
   assert.equal(guild1Map.has('user3'), false);
 
+  // Test log channel configuration
+  assert.equal(repo.getGuildLogChannel('guild1'), null);
+  repo.setGuildLogChannel('guild1', '1234567890');
+  assert.equal(repo.getGuildLogChannel('guild1'), '1234567890');
+  repo.setGuildLogChannel('guild1', null);
+  assert.equal(repo.getGuildLogChannel('guild1'), null);
+
   // Delete user
   repo.deleteUser('guild1', 'user1');
   assert.equal(repo.getUserActivity('guild1', 'user1'), null);

@@ -43,9 +43,17 @@ export class ActivityRepository {
 
       CREATE TABLE IF NOT EXISTS guild_settings (
         guild_id TEXT PRIMARY KEY,
-        installed_at INTEGER NOT NULL
+        installed_at INTEGER NOT NULL,
+        log_channel_id TEXT
       );
     `);
+
+    // Безопасная миграция, если таблица была создана ранее без колонки log_channel_id
+    try {
+      this.db.exec('ALTER TABLE guild_settings ADD COLUMN log_channel_id TEXT;');
+    } catch {
+      // Колонка уже существует
+    }
   }
 
   /**
@@ -63,6 +71,29 @@ export class ActivityRepository {
     const insert = this.db.prepare('INSERT INTO guild_settings (guild_id, installed_at) VALUES (?, ?)');
     insert.run(guildId, now);
     return now;
+  }
+
+  /**
+   * Получить настроенный ID канала логирования для гильдии
+   */
+  public getGuildLogChannel(guildId: string): string | null {
+    const stmt = this.db.prepare('SELECT log_channel_id FROM guild_settings WHERE guild_id = ?');
+    const row = stmt.get(guildId) as { log_channel_id: string | null } | undefined;
+    return row?.log_channel_id || null;
+  }
+
+  /**
+   * Установить или сбросить (null) канал логирования для гильдии
+   */
+  public setGuildLogChannel(guildId: string, channelId: string | null): void {
+    const installedAt = this.getGuildInstalledAt(guildId);
+    const stmt = this.db.prepare(`
+      INSERT INTO guild_settings (guild_id, installed_at, log_channel_id)
+      VALUES (?, ?, ?)
+      ON CONFLICT(guild_id) DO UPDATE SET
+        log_channel_id = excluded.log_channel_id
+    `);
+    stmt.run(guildId, installedAt, channelId);
   }
 
   /**

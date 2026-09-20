@@ -6,6 +6,8 @@ import {
   Client,
   REST,
   Routes,
+  ChannelType,
+  TextChannel,
 } from 'discord.js';
 import { checkGuildInactivity, scanGuildHistory } from '../services/inactivityChecker.js';
 import { activityRepo } from '../db/repository.js';
@@ -42,6 +44,18 @@ export const slashCommands = [
     .setName('mark-all-active')
     .setDescription('Сбросить таймер и пометить всех текущих участников активными от сегодняшнего дня')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('set-log-channel')
+    .setDescription('Настроить канал для логирования отчетов и киков бота')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addChannelOption(option =>
+      option
+        .setName('channel')
+        .setDescription('Текстовый канал для логов (оставьте пустым, чтобы отключить логирование)')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    ),
 ];
 
 export async function registerCommands(client: Client): Promise<void> {
@@ -223,6 +237,60 @@ export async function handleInteractionCreate(interaction: ChatInputCommandInter
       });
     } catch (err) {
       await interaction.editReply({ content: `Ошибка: ${err instanceof Error ? err.message : String(err)}` });
+    }
+    return;
+  }
+
+  // 5. Команда /set-log-channel
+  if (interaction.commandName === 'set-log-channel') {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      await interaction.reply({ content: 'У вас нет прав администратора для запуска этой команды.', ephemeral: true });
+      return;
+    }
+
+    const channel = interaction.options.getChannel('channel');
+
+    if (!channel) {
+      // Если канал не указан — отключаем логирование
+      activityRepo.setGuildLogChannel(interaction.guild.id, null);
+      await interaction.reply({
+        content: '🔕 **Логирование отключено.** Отчеты о проверках и уведомления о киках больше не будут отправляться в канал.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (channel.type !== ChannelType.GuildText) {
+      await interaction.reply({ content: 'Пожалуйста, выберите обычный текстовый канал.', ephemeral: true });
+      return;
+    }
+
+    activityRepo.setGuildLogChannel(interaction.guild.id, channel.id);
+
+    try {
+      const targetChannel = await interaction.guild.channels.fetch(channel.id) as TextChannel;
+      const testEmbed = new EmbedBuilder()
+        .setTitle('📋 Канал логирования успешно настроен!')
+        .setColor(0x00ff00)
+        .setDescription(
+          `Этот канал установлен для системных логов бота **Ebalbox Activity**.\n\n` +
+          `Сюда будут автоматически приходить:\n` +
+          `• 📊 Плановые и ручные отчеты о проверках неактивности\n` +
+          `• 👢 Логи об исключении (кике) участников за неактивность более 30 дней`
+        )
+        .setTimestamp();
+
+      await targetChannel.send({ embeds: [testEmbed] });
+
+      await interaction.reply({
+        content: `✅ Канал для логов успешно установлен: <#${channel.id}>! В него отправлено проверочное сообщение.`,
+        ephemeral: true,
+      });
+    } catch (err) {
+      await interaction.reply({
+        content: `⚠️ Канал сохранен (<#${channel.id}>), но бот не смог отправить тестовое сообщение. Убедитесь, что у роли бота есть права «Просматривать канал», «Отправлять сообщения» и «Встраивать ссылки» в этом канале.`,
+        ephemeral: true,
+      });
     }
     return;
   }

@@ -125,6 +125,7 @@ export async function checkGuildInactivity(guild: Guild, options?: { dryRun?: bo
           activityRepo.deleteUser(guild.id, member.id);
           result.kickedCount++;
           console.log(`[Kick] Кикнут: ${member.user.tag} (${member.id}) — ${reason}`);
+          await logKickEvent(guild, member.user.tag, member.id, daysInactive, reason);
         } catch (error) {
           console.error(`[Kick Error] Не удалось кикнуть ${member.user.tag}:`, error);
           result.failedKicks.push({
@@ -187,19 +188,20 @@ export async function scanGuildHistory(guild: Guild, limitPerChannel: number = 1
 /**
  * Отправка отчета о проверке в специальный канал логов Discord (если настроен)
  */
-async function sendLogReport(guild: Guild, result: InactivityCheckResult): Promise<void> {
-  if (!config.logChannelId) {
+export async function sendLogReport(guild: Guild, result: InactivityCheckResult): Promise<void> {
+  const logChannelId = activityRepo.getGuildLogChannel(guild.id) || config.logChannelId;
+  if (!logChannelId) {
     return;
   }
 
   try {
-    const channel = await guild.channels.fetch(config.logChannelId);
+    const channel = await guild.channels.fetch(logChannelId);
     if (!channel || !(channel instanceof TextChannel)) {
       return;
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`📊 Отчет о проверке активности (${result.isDryRun ? 'Тестовый режим' : 'Боевой режим'})`)
+      .setTitle(`📊 Отчет о проверке активности (${result.isDryRun ? 'Тестовый режим (без кика)' : 'Боевой режим (кик выполнен)'})`)
       .setColor(result.isDryRun ? 0xffa500 : 0xff0000)
       .setDescription(
         `**Всего участников:** ${result.totalMembers}\n` +
@@ -227,5 +229,37 @@ async function sendLogReport(guild: Guild, result: InactivityCheckResult): Promi
     await channel.send({ embeds: [embed] });
   } catch (error) {
     console.error('[Log Report Error] Не удалось отправить отчет в канал:', error);
+  }
+}
+
+/**
+ * Отправка лога об исключении конкретного участника в канал логов
+ */
+export async function logKickEvent(guild: Guild, userTag: string, userId: string, daysInactive: number, reason: string): Promise<void> {
+  const logChannelId = activityRepo.getGuildLogChannel(guild.id) || config.logChannelId;
+  if (!logChannelId) {
+    return;
+  }
+
+  try {
+    const channel = await guild.channels.fetch(logChannelId);
+    if (!channel || !(channel instanceof TextChannel)) {
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('👢 Участник исключен за неактивность')
+      .setColor(0xff0000)
+      .addFields(
+        { name: 'Участник', value: `**${userTag}** (<@${userId}>)`, inline: true },
+        { name: 'ID', value: `\`${userId}\``, inline: true },
+        { name: 'Неактивен', value: `**${daysInactive}** дн.`, inline: true },
+        { name: 'Причина', value: reason, inline: false }
+      )
+      .setTimestamp();
+
+    await channel.send({ embeds: [embed] });
+  } catch (error) {
+    console.error('[Kick Log Error] Не удалось отправить лог кика в канал:', error);
   }
 }
