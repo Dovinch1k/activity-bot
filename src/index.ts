@@ -37,8 +37,8 @@ client.once(Events.ClientReady, async readyClient => {
   console.log(`⚙️ Режим кика по умолчанию: ${config.dryRun ? 'ТЕСТОВЫЙ (DRY_RUN=true)' : 'РЕАЛЬНЫЙ (DRY_RUN=false)'}`);
 
   readyClient.user.setActivity({
-    name: `активность (${config.inactivityDays} дн.)`,
-    type: ActivityType.Watching,
+    name: config.botActivity,
+    type: ActivityType.Playing,
   });
 
   // Регистрируем слэш-команды

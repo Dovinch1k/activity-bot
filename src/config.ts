@@ -11,6 +11,7 @@ export interface Config {
   logChannelId?: string;
   immuneRoleIds: string[];
   dbPath: string;
+  botActivity: string;
 }
 
 const inactivityDays = Number(process.env.INACTIVITY_DAYS) || 30;
@@ -29,4 +30,5 @@ export const config: Config = {
     .map(id => id.trim())
     .filter(Boolean),
   dbPath: process.env.DB_PATH || './data/activity.db',
+  botActivity: process.env.BOT_ACTIVITY || 'donate.ebalbox.tech',
 };
