@@ -64,13 +64,14 @@ test('Voice join detection logic', () => {
 });
 
 test('Immune roles and booster exclusion logic', () => {
-  const immuneRoleIds = ['1447298868323549435', '1553082516531970088'];
+  const immuneRoleIds = ['1447298868323549435', '1553082516531970088', '1447298867963105451'];
 
   const members = [
     { id: '1', roles: ['1447298868323549435'], premiumSince: null }, // Модератор
     { id: '2', roles: ['1553082516531970088'], premiumSince: null }, // Бустер по роли
-    { id: '3', roles: [], premiumSince: new Date() }, // Nitro booster
-    { id: '4', roles: ['regular_role'], premiumSince: null }, // Обычный участник
+    { id: '3', roles: ['1447298867963105451'], premiumSince: null }, // Роль ботов
+    { id: '4', roles: [], premiumSince: new Date() }, // Nitro booster
+    { id: '5', roles: ['regular_role'], premiumSince: null }, // Обычный участник
   ];
 
   const isImmune = (member: { roles: string[]; premiumSince: Date | null }) => {
@@ -80,6 +81,7 @@ test('Immune roles and booster exclusion logic', () => {
 
   assert.equal(isImmune(members[0]), true, 'Модератор должен иметь иммунитет');
   assert.equal(isImmune(members[1]), true, 'Бустер по роли должен иметь иммунитет');
-  assert.equal(isImmune(members[2]), true, 'Nitro booster должен иметь иммунитет');
-  assert.equal(isImmune(members[3]), false, 'Обычный участник не должен иметь иммунитет');
+  assert.equal(isImmune(members[2]), true, 'Роль ботов должна иметь иммунитет');
+  assert.equal(isImmune(members[3]), true, 'Nitro booster должен иметь иммунитет');
+  assert.equal(isImmune(members[4]), false, 'Обычный участник не должен иметь иммунитет');
 });

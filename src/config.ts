@@ -19,6 +19,7 @@ const inactivityDays = Number(process.env.INACTIVITY_DAYS) || 30;
 const defaultImmuneRoleIds = [
   '1447298868323549435', // Модератор
   '1553082516531970088', // Бустер сервера
+  '1447298867963105451', // Боты
 ];
 
 const envImmuneRoleIds = (process.env.IMMUNE_ROLE_IDS || '')

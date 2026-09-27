@@ -54,8 +54,8 @@ export async function checkGuildInactivity(guild: Guild, options?: { dryRun?: bo
   };
 
   for (const [, member] of members) {
-    // 1. ОБЯЗАТЕЛЬНО: Игнорируем ботов
-    if (member.user.bot) {
+    // 1. ОБЯЗАТЕЛЬНО: Игнорируем ботов (по флагу Discord или роли ботов)
+    if (member.user.bot || member.roles.cache.has('1447298867963105451')) {
       result.botsIgnored++;
       continue;
     }

@@ -152,13 +152,13 @@ export async function handleInteractionCreate(interaction: ChatInputCommandInter
       return;
     }
 
-    if (member.user.bot) {
+    if (member.user.bot || member.roles.cache.has('1447298867963105451')) {
       await interaction.reply({
         embeds: [
           new EmbedBuilder()
             .setTitle(`Информация об активности: ${member.user.tag}`)
             .setColor(0x808080)
-            .setDescription('🤖 **Этот пользователь является ботом.** Боты полностью игнорируются системой кика.')
+            .setDescription('🤖 **Этот пользователь является ботом (или имеет роль бота).** Боты полностью игнорируются системой кика.')
         ],
         ephemeral: true,
       });

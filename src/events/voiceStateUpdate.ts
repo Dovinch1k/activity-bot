@@ -4,8 +4,8 @@ import { activityRepo } from '../db/repository.js';
 export async function handleVoiceStateUpdate(oldState: VoiceState, newState: VoiceState): Promise<void> {
   const member = newState.member;
 
-  // ОБЯЗАТЕЛЬНО: Полностью игнорируем ботов
-  if (!member || member.user.bot) {
+  // ОБЯЗАТЕЛЬНО: Полностью игнорируем ботов (по флагу Discord или роли ботов)
+  if (!member || member.user.bot || member.roles.cache.has('1447298867963105451')) {
     return;
   }
 
