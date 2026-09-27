@@ -184,16 +184,40 @@ export async function handleInteractionCreate(interaction: ChatInputCommandInter
     const daysInactive = Math.floor((now - lastActiveAt) / (24 * 60 * 60 * 1000));
     const daysUntilKick = Math.max(0, config.inactivityDays - daysInactive);
     const isAtRisk = daysInactive >= config.inactivityDays;
+    const isOwner = member.id === interaction.guild.ownerId;
+    const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
+    const isBooster = !!member.premiumSince;
+    const hasImmuneRole = config.immuneRoleIds.some(roleId => member.roles.cache.has(roleId));
+
+    let statusText: string;
+    let embedColor: number;
+
+    if (isOwner) {
+      statusText = '👑 **Иммунитет (Владелец сервера)**';
+      embedColor = 0xffd700;
+    } else if (isAdmin) {
+      statusText = '🛡️ **Иммунитет (Администратор)**';
+      embedColor = 0x3498db;
+    } else if (hasImmuneRole || isBooster) {
+      statusText = '🛡️ **Иммунитет (Модератор / Бустер сервера)**';
+      embedColor = 0x9b59b6;
+    } else if (isAtRisk) {
+      statusText = '🚨 **Подлежит кику за неактивность!**';
+      embedColor = 0xff0000;
+    } else {
+      statusText = `✅ Активен (до порога кика: ~${daysUntilKick} дн.)`;
+      embedColor = 0x00ff00;
+    }
 
     const embed = new EmbedBuilder()
       .setTitle(`Информация об активности: ${member.user.tag}`)
-      .setColor(isAtRisk ? 0xff0000 : 0x00ff00)
+      .setColor(embedColor)
       .addFields(
         { name: '📅 Дата входа на сервер', value: `<t:${Math.floor(joinedAt / 1000)}:R>`, inline: true },
         { name: '🕒 Последняя активность', value: `<t:${Math.floor(lastActiveAt / 1000)}:R>`, inline: true },
         { name: '🎯 Тип активности', value: actionDesc, inline: true },
         { name: '⏳ Дней неактивен', value: `**${daysInactive}** из ${config.inactivityDays}`, inline: true },
-        { name: 'Статус', value: isAtRisk ? '🚨 **Подлежит кику за неактивность!**' : `✅ Активен (до порога кика: ~${daysUntilKick} дн.)`, inline: true }
+        { name: 'Статус', value: statusText, inline: true }
       )
       .setThumbnail(member.user.displayAvatarURL());
 

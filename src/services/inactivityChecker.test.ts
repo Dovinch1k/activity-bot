@@ -62,3 +62,24 @@ test('Voice join detection logic', () => {
     (!!leave.oldChannel && !!leave.newChannel && leave.oldChannel !== leave.newChannel);
   assert.equal(isLeaveJoin, false, 'Выход из канала не должен считаться заходом');
 });
+
+test('Immune roles and booster exclusion logic', () => {
+  const immuneRoleIds = ['1447298868323549435', '1553082516531970088'];
+
+  const members = [
+    { id: '1', roles: ['1447298868323549435'], premiumSince: null }, // Модератор
+    { id: '2', roles: ['1553082516531970088'], premiumSince: null }, // Бустер по роли
+    { id: '3', roles: [], premiumSince: new Date() }, // Nitro booster
+    { id: '4', roles: ['regular_role'], premiumSince: null }, // Обычный участник
+  ];
+
+  const isImmune = (member: { roles: string[]; premiumSince: Date | null }) => {
+    if (member.premiumSince) return true;
+    return immuneRoleIds.some(id => member.roles.includes(id));
+  };
+
+  assert.equal(isImmune(members[0]), true, 'Модератор должен иметь иммунитет');
+  assert.equal(isImmune(members[1]), true, 'Бустер по роли должен иметь иммунитет');
+  assert.equal(isImmune(members[2]), true, 'Nitro booster должен иметь иммунитет');
+  assert.equal(isImmune(members[3]), false, 'Обычный участник не должен иметь иммунитет');
+});

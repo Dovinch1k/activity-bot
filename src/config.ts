@@ -16,6 +16,16 @@ export interface Config {
 
 const inactivityDays = Number(process.env.INACTIVITY_DAYS) || 30;
 
+const defaultImmuneRoleIds = [
+  '1447298868323549435', // Модератор
+  '1553082516531970088', // Бустер сервера
+];
+
+const envImmuneRoleIds = (process.env.IMMUNE_ROLE_IDS || '')
+  .split(',')
+  .map(id => id.trim())
+  .filter(Boolean);
+
 export const config: Config = {
   discordToken: process.env.DISCORD_TOKEN || '',
   clientId: process.env.CLIENT_ID || '',
@@ -25,10 +35,7 @@ export const config: Config = {
   checkIntervalHours: Number(process.env.CHECK_INTERVAL_HOURS) || 12,
   dryRun: process.env.DRY_RUN === 'true' || process.env.DRY_RUN === '1',
   logChannelId: process.env.LOG_CHANNEL_ID || '',
-  immuneRoleIds: (process.env.IMMUNE_ROLE_IDS || '')
-    .split(',')
-    .map(id => id.trim())
-    .filter(Boolean),
+  immuneRoleIds: Array.from(new Set([...defaultImmuneRoleIds, ...envImmuneRoleIds])),
   dbPath: process.env.DB_PATH || './data/activity.db',
   botActivity: process.env.BOT_ACTIVITY || 'donate.ebalbox.tech',
 };

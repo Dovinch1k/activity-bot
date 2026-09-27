@@ -72,7 +72,13 @@ export async function checkGuildInactivity(guild: Guild, options?: { dryRun?: bo
       continue;
     }
 
-    // 4. Игнорируем иммунные роли из конфигурации
+    // 4. Игнорируем бустеров сервера (Nitro Booster)
+    if (member.premiumSince) {
+      result.immuneSkipped++;
+      continue;
+    }
+
+    // 5. Игнорируем иммунные роли из конфигурации (модераторы, бустеры и др.)
     const hasImmuneRole = config.immuneRoleIds.some(roleId => member.roles.cache.has(roleId));
     if (hasImmuneRole) {
       result.immuneSkipped++;
